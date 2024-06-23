@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include <cassert>
+#include <vector>
 
 namespace fs = std::filesystem;
 using indentation_level_t = unsigned short;
@@ -19,10 +20,10 @@ std::string n_whitespaces(indentation_level_t n) {
     return out;
 }
 
-void write_as_html_comment_newline(std::string& b, const std::string& s) {
+void write_as_html_comment(std::string& b, const std::string& s) {
     b.append("<!-- ");
     b.append(s);
-    b.append(" -->\n");
+    b.append(" -->");
 }
 
 
@@ -32,7 +33,6 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
     // templates within them (templates can have other templates inside), to be used in the creation of the main output file
 
     assert(path.has_filename()); // should be checked by the caller
-    (void)_is_on_bottom_of_stack;
 
     std::ifstream ifs(path);
     ifs >> std::noskipws;
@@ -40,10 +40,13 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
     std::string new_contents;
     const std::string input_file_parent_path_str = path.parent_path().string() + "/"; 
     constexpr auto OUTPUT_FILE_PREFIX = "t.";
+    constexpr auto TEMPORARY_PREFIX = "temp.";
     indentation_level_t indentation_level{};
+    static std::vector<fs::path> temporaries_to_delete;
 
     while (ifs >> current_c) {
         if (current_c == '<') {
+        lessthan_encountered:
             ifs >> current_c;
 
             if (current_c == '@') {
@@ -78,13 +81,23 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
                 } else /* found the filename */ {
                     // replace the template in the main file with actual contents of said template
                     // todo: handle tempaltes in the template file recursively
-                    std::ifstream ifs_template(input_file_parent_path_str + potential_filename);
+                    rewrite_with_filled_templates(input_file_parent_path_str + potential_filename, should_write_comments, false);
+                    
+                    std::ifstream ifs_template(input_file_parent_path_str + TEMPORARY_PREFIX + potential_filename);
+
+                    if (!ifs_template.good()) {
+                        std::cout << "Fatal error - file " << (input_file_parent_path_str + potential_filename) << " doesn't exist, exiting...";     
+                        ifs.close();                 
+                        std::exit(EXIT_FAILURE);
+                    }
+
                     const std::string indentation_whitespaces = n_whitespaces(indentation_level);
                     std::string line;
 
                     if (should_write_comments) {
                         // the comment will be indented appropriately
-                        write_as_html_comment_newline(new_contents, potential_filename);
+                        write_as_html_comment(new_contents, potential_filename);
+                        new_contents.append("\n");
                     } else {
                         // first line has to be handled separately if the comment isn't written, because the already written whitespace isnt used then
                         // so we will use it now, to indent the first line appropriately
@@ -102,7 +115,7 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
 
                     if (should_write_comments) {
                         new_contents.append(indentation_whitespaces);
-                        write_as_html_comment_newline(new_contents, "END " + potential_filename);
+                        write_as_html_comment(new_contents, "END " + potential_filename);
                     }
                 }
             }
@@ -122,6 +135,11 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
                         new_contents.push_back(' ');
                     }
 
+                    if (current_c == '<') {
+                        goto lessthan_encountered; // should be completely safe :)
+                        break;
+                    }
+
                     new_contents.push_back(current_c);
                     break;
                 }
@@ -133,15 +151,24 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
             new_contents.push_back(current_c);
         }
     }
+    
+    if (_is_on_bottom_of_stack) {
+        std::ofstream(input_file_parent_path_str + OUTPUT_FILE_PREFIX + path.filename().string()) << new_contents;
 
-    std::ofstream ofs(input_file_parent_path_str + OUTPUT_FILE_PREFIX + path.filename().string());
-    ofs << new_contents;
+        for (auto& f : temporaries_to_delete) {
+            fs::remove(f);
+        }
+    } else {
+        const std::string filename = input_file_parent_path_str + TEMPORARY_PREFIX + path.filename().string();
+        std::ofstream(filename) << new_contents;
+        temporaries_to_delete.push_back(filename);
+    }
 }
 
 int main(int argc, const char* const* argv) {
     (void)argc;
     (void)argv;
-    rewrite_with_filled_templates("./test/index.html", true);
+    rewrite_with_filled_templates("./test/index_with_template_inside_template.html", true);
 
     return EXIT_SUCCESS;
 }

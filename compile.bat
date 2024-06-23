@@ -1,1 +1,1 @@
-g++ -std=c++23 -Wpedantic -Werror -Wall -Wextra main.cpp
+g++ -o html-tmpl -std=c++23 -Wpedantic -Werror -Wall -Wextra main.cpp
