@@ -29,11 +29,11 @@ void write_as_html_comment(std::string& b, const std::string& s) {
 
 void exit_if_file_doesnt_exist(const std::string& filename) noexcept {
     std::FILE* file = std::fopen(filename.c_str(), "r");
-    if (file != nullptr) { // faster than using fstream
+    if (file == nullptr) { // faster than using fstream
         std::cout << "Fatal error - file \"" << filename << "\" doesn't exist, exiting...";
-        std::fclose(file);
         std::exit(EXIT_FAILURE);
     }
+    std::fclose(file);
 }
 
 static std::unordered_map<std::string, std::string> temporaries;
