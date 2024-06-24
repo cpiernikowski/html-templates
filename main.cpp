@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cassert>
 #include <vector>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 using indentation_level_t = unsigned short;
@@ -26,8 +27,19 @@ void write_as_html_comment(std::string& b, const std::string& s) {
     b.append(" -->");
 }
 
+void exit_if_file_doesnt_exist(const std::string& filename) noexcept {
+    std::FILE* file = std::fopen(filename.c_str(), "r");
+    if (file != nullptr) { // faster than using fstream
+        std::cout << "Fatal error - file \"" << filename << "\" doesn't exist, exiting...";
+        std::fclose(file);
+        std::exit(EXIT_FAILURE);
+    }
+}
 
-void rewrite_with_filled_templates(const fs::path& path, bool should_write_comments, bool _is_on_bottom_of_stack = true) {
+static std::unordered_map<std::string, std::string> temporaries;
+
+template <bool _is_on_bottom_of_stack = true>
+void rewrite_with_filled_templates(const fs::path& path, bool should_write_comments) {
     // if _is_on_bottom_of_stack: will create a new file named t.<p>
     // else (only called this way within this function, with template files): creates temporary files with handled
     // templates within them (templates can have other templates inside), to be used in the creation of the main output file
@@ -42,7 +54,6 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
     constexpr auto OUTPUT_FILE_PREFIX = "t.";
     constexpr auto TEMPORARY_PREFIX = "temp.";
     indentation_level_t indentation_level{};
-    static std::vector<fs::path> temporaries_to_delete;
 
     while (ifs >> current_c) {
         if (current_c == '<') {
@@ -79,18 +90,15 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
                 if (reached_iters_max) {
                     new_contents.append(potential_filename);
                 } else /* found the filename */ {
-                    // replace the template in the main file with actual contents of said template
-                    // todo: handle tempaltes in the template file recursively
-                    rewrite_with_filled_templates(input_file_parent_path_str + potential_filename, should_write_comments, false);
+                    const std::string potential_filename_with_dir = input_file_parent_path_str + potential_filename;
+                    exit_if_file_doesnt_exist(potential_filename_with_dir);
+
+                    // handle templates recursively - if _is_on_bottom_of_stack, the new contents will be written to a new file,
+                    // else - they will be written to the temporaries map
+                    // ifs at the bottom of this function handle this behaviour
+                    rewrite_with_filled_templates<false>(potential_filename_with_dir, should_write_comments);
                     
-                    std::ifstream ifs_template(input_file_parent_path_str + TEMPORARY_PREFIX + potential_filename);
-
-                    if (!ifs_template.good()) {
-                        std::cout << "Fatal error - file " << (input_file_parent_path_str + potential_filename) << " doesn't exist, exiting...";     
-                        ifs.close();                 
-                        std::exit(EXIT_FAILURE);
-                    }
-
+                    std::istringstream stream_template_contents(temporaries.at(input_file_parent_path_str + TEMPORARY_PREFIX + potential_filename));
                     const std::string indentation_whitespaces = n_whitespaces(indentation_level);
                     std::string line;
 
@@ -101,13 +109,12 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
                     } else {
                         // first line has to be handled separately if the comment isn't written, because the already written whitespace isnt used then
                         // so we will use it now, to indent the first line appropriately
-                        
-                        std::getline(ifs_template, line);
+                        std::getline(stream_template_contents, line);
                         new_contents.append(line);
                         new_contents.push_back('\n');
                     }
 
-                    while (std::getline(ifs_template, line)) {
+                    while (std::getline(stream_template_contents, line)) {
                         new_contents.append(indentation_whitespaces);
                         new_contents.append(line);
                         new_contents.push_back('\n');
@@ -152,16 +159,13 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
         }
     }
     
-    if (_is_on_bottom_of_stack) {
+    if constexpr (_is_on_bottom_of_stack) {
+        // create the main file
         std::ofstream(input_file_parent_path_str + OUTPUT_FILE_PREFIX + path.filename().string()) << new_contents;
-
-        for (auto& f : temporaries_to_delete) {
-            fs::remove(f);
-        }
     } else {
-        const std::string filename = input_file_parent_path_str + TEMPORARY_PREFIX + path.filename().string();
-        std::ofstream(filename) << new_contents;
-        temporaries_to_delete.push_back(filename);
+        // create buffers for templates inside templates, which are not meant to be written to the disk,
+        // we only want to write the main file to the disk
+        temporaries.at(input_file_parent_path_str + TEMPORARY_PREFIX + path.filename().string()) = new_contents;
     }
 }
 
