@@ -30,7 +30,7 @@ void write_as_html_comment(std::string& b, const std::string& s) {
 void exit_if_file_doesnt_exist(const std::string& filename) noexcept {
     std::FILE* file = std::fopen(filename.c_str(), "r");
     if (file == nullptr) { // faster than using fstream
-        std::cout << "Fatal error - file \"" << filename << "\" doesn't exist, exiting...";
+        std::cerr << "Fatal error - file \"" << filename << "\" doesn't exist, exiting...";
         std::exit(EXIT_FAILURE);
     }
     std::fclose(file);
@@ -44,7 +44,7 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
     // else (only called this way within this function, with template files): creates temporary buffers with handled
     // templates within them (templates can have other templates inside), to be used in the creation of the main output file
 
-    assert(path.has_filename()); // should be checked by the caller
+    exit_if_file_doesnt_exist(path.string());
 
     std::ifstream ifs(path);
     ifs >> std::noskipws;
@@ -169,10 +169,28 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
 }
 
 int main(int argc, const char* const* argv) {
-    (void)argc;
-    (void)argv;
-    std::cout << argc;
-    rewrite_with_filled_templates("./test/index_with_template_inside_template.html", true);
+    if (argc < 2) {
+        std::cout << "At least one input file has to be specified, exiting...";
+        return EXIT_FAILURE;
+    }
+
+
+    bool should_write_comments = true;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-nc") {
+            should_write_comments = false;
+        }
+    }
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-nc") {
+            continue;
+        }
+        rewrite_with_filled_templates(arg, should_write_comments);
+    }
 
     return EXIT_SUCCESS;
 }
