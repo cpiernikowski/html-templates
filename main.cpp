@@ -2,9 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <iostream>
 #include <cassert>
-#include <vector>
 #include <unordered_map>
 
 namespace fs = std::filesystem;
@@ -30,7 +28,7 @@ void write_as_html_comment(std::string& b, const std::string& s) {
 void exit_if_file_doesnt_exist(const std::string& filename) noexcept {
     std::FILE* file = std::fopen(filename.c_str(), "r");
     if (file == nullptr) { // faster than using fstream
-        std::cerr << "Fatal error - file \"" << filename << "\" doesn't exist, exiting...";
+        std::printf("Fatal error - file \"%s\" doesn't exist, exiting...\n", filename.c_str());
         std::exit(EXIT_FAILURE);
     }
     std::fclose(file);
@@ -170,10 +168,9 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
 
 int main(int argc, const char* const* argv) {
     if (argc < 2) {
-        std::cout << "At least one input file has to be specified, exiting...";
+        std::puts("At least one input file has to be specified, exiting...\n");
         return EXIT_FAILURE;
     }
-
 
     bool should_write_comments = true;
 
