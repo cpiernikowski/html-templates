@@ -41,7 +41,7 @@ static std::unordered_map<std::string, std::string> temporaries;
 template <bool _is_on_bottom_of_stack = true>
 void rewrite_with_filled_templates(const fs::path& path, bool should_write_comments) {
     // if _is_on_bottom_of_stack: will create a new file named t.<p>
-    // else (only called this way within this function, with template files): creates temporary files with handled
+    // else (only called this way within this function, with template files): creates temporary buffers with handled
     // templates within them (templates can have other templates inside), to be used in the creation of the main output file
 
     assert(path.has_filename()); // should be checked by the caller
@@ -144,7 +144,6 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
 
                     if (current_c == '<') {
                         goto lessthan_encountered; // should be completely safe :)
-                        break;
                     }
 
                     new_contents.push_back(current_c);
@@ -165,13 +164,14 @@ void rewrite_with_filled_templates(const fs::path& path, bool should_write_comme
     } else {
         // create buffers for templates inside templates, which are not meant to be written to the disk,
         // we only want to write the main file to the disk
-        temporaries.at(input_file_parent_path_str + TEMPORARY_PREFIX + path.filename().string()) = new_contents;
+        temporaries[input_file_parent_path_str + TEMPORARY_PREFIX + path.filename().string()] = new_contents;
     }
 }
 
 int main(int argc, const char* const* argv) {
     (void)argc;
     (void)argv;
+    std::cout << argc;
     rewrite_with_filled_templates("./test/index_with_template_inside_template.html", true);
 
     return EXIT_SUCCESS;
